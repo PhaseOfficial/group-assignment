@@ -1,80 +1,56 @@
 import streamlit as st
+import pandas as pd
 import pickle
-import numpy as np
+import xgboost as xgb  # Ensure XGBoost is installed
 
-# Load the XGBoost model
-model_path = "xgboost_model.pkl"
+# Load the model
+@st.cache_resource
+def load_model():
+    model_path = "xgboost_model.pkl"
+    with open(model_path, "rb") as file:
+        return pickle.load(file)
 
-with open(model_path, "rb") as file:
-    model = pickle.load(file)
+# Load test dataset
+@st.cache_data
+def load_data():
+    test_data_path = "Test.csv"
+    return pd.read_csv(test_data_path)
 
-# App title
-st.title("Loan Outcome Prediction")
+# Preprocess input
+def preprocess_input(data, columns):
+    """Ensure data matches the model's expected format"""
+    return data[columns]
 
-# Input fields for features
-st.write("### Input the Features:")
+# Streamlit UI
+st.title("Loan Prediction App")
+st.write("Predict loan outcomes using the provided model and dataset.")
 
-# Text input for optional identifiers
-ID = st.text_input("ID (Optional)")
-customer_id = st.text_input("Customer ID (Optional)")
-country_id = st.text_input("Country ID (Optional)")
-tbl_loan_id = st.text_input("Loan ID (Optional)")
-lender_id = st.text_input("Lender ID (Optional)")
+# Upload file option
+uploaded_file = st.file_uploader("Upload a CSV file for prediction", type=["csv"])
+if uploaded_file:
+    user_data = pd.read_csv(uploaded_file)
+    st.write("Uploaded Data:")
+    st.dataframe(user_data)
 
-# Loan type (categorical feature)
-loan_type = st.selectbox("Loan Type", options=["Type 1", "Type 2", "Type 3"])  # Adjust options as needed
-loan_type_mapping = {"Type 1": 0, "Type 2": 1, "Type 3": 2}  # Map to numeric values
-
-# Numerical inputs for loan amounts
-Total_Amount = st.number_input("Total Amount", min_value=0.0, step=0.01)
-Total_Amount_to_Repay = st.number_input("Total Amount to Repay", min_value=0.0, step=0.01)
-
-# Disbursement date components
-st.write("#### Disbursement Date")
-disbursement_date_year = st.number_input("Year", min_value=1900, max_value=2100, step=1)
-disbursement_date_month = st.number_input("Month", min_value=1, max_value=12, step=1)
-disbursement_date_day = st.number_input("Day", min_value=1, max_value=31, step=1)
-
-# Due date components
-st.write("#### Due Date")
-due_date_year = st.number_input("Year", min_value=1900, max_value=2100, step=1, key="due_date_year")
-due_date_month = st.number_input("Month", min_value=1, max_value=12, step=1, key="due_date_month")
-due_date_day = st.number_input("Day", min_value=1, max_value=31, step=1, key="due_date_day")
-
-# Additional numerical inputs
-duration = st.number_input("Duration (days)", min_value=1, step=1)
-New_versus_Repeat = st.selectbox("New or Repeat Borrower", options=["New", "Repeat"])
-repeat_mapping = {"New": 0, "Repeat": 1}  # Map to numeric values
-
-Amount_Funded_By_Lender = st.number_input("Amount Funded By Lender", min_value=0.0, step=0.01)
-Lender_portion_Funded = st.number_input("Lender Portion Funded", min_value=0.0, max_value=1.0, step=0.01)
-Lender_portion_to_be_repaid = st.number_input("Lender Portion to be Repaid", min_value=0.0, step=0.01)
-
-# Button to make a prediction
-if st.button("Predict"):
+    # Preprocess and predict
+    model = load_model()
     try:
-        # Prepare features for prediction
-        features = np.array([
-            loan_type_mapping[loan_type],  # Categorical mapping for loan type
-            Total_Amount,
-            Total_Amount_to_Repay,
-            disbursement_date_year,
-            disbursement_date_month,
-            disbursement_date_day,
-            due_date_year,
-            due_date_month,
-            due_date_day,
-            duration,
-            repeat_mapping[New_versus_Repeat],  # Categorical mapping for repeat borrower
-            Amount_Funded_By_Lender,
-            Lender_portion_Funded,
-            Lender_portion_to_be_repaid
-        ]).reshape(1, -1)
-
-        # Make prediction
-        prediction = model.predict(features)
-
-        # Display result
-        st.write(f"### Predicted Loan Outcome: {'Approved' if prediction[0] == 1 else 'Rejected'}")
+        predictions = model.predict(user_data)  # Ensure `user_data` matches expected input
+        user_data["Prediction"] = predictions
+        st.write("Prediction Results:")
+        st.dataframe(user_data)
     except Exception as e:
-        st.write(f"Error during prediction: {e}")
+        st.error(f"Error during prediction: {e}")
+
+# Test prediction
+st.write("Or use sample data:")
+sample_data = load_data()
+if st.button("Run Predictions on Sample Data"):
+    model = load_model()
+    try:
+        sample_predictions = model.predict(sample_data)
+        sample_data["Prediction"] = sample_predictions
+        st.write("Sample Data with Predictions:")
+        st.dataframe(sample_data)
+    except Exception as e:
+        st.error(f"Error during prediction: {e}")
